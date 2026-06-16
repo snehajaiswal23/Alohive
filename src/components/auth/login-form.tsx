@@ -15,14 +15,30 @@ export function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 800))
-    setLoading(false)
-    router.push(tab === "owner" ? "/dashboard" : "/staff")
+    setError("")
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || "Something went wrong")
+        return
+      }
+      router.push(data.user.role === "owner" ? "/dashboard" : "/staff")
+    } catch {
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -110,6 +126,10 @@ export function LoginForm() {
             {loading ? "Signing in…" : tab === "owner" ? "Sign in" : "Sign in as staff"}
           </Button>
         </form>
+
+        {error && (
+          <p className="text-center text-xs text-red-400 mt-4">{error}</p>
+        )}
 
         {tab === "owner" && (
           <p className="text-center text-xs text-text-secondary mt-6">
