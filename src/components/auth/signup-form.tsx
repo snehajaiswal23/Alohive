@@ -24,6 +24,7 @@ const PLANS = [
 export function SignupForm() {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
   const router = useRouter()
 
   const [form, setForm] = useState({
@@ -43,11 +44,35 @@ export function SignupForm() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
 
+  const canContinue =
+    step === 1
+      ? form.businessName && form.ownerName && form.email && form.phone && form.password.length >= 8
+      : step === 2
+      ? !!form.businessType
+      : step === 3
+      ? !!form.city
+      : true
+
   const handleFinish = async () => {
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 1000))
-    setLoading(false)
-    router.push("/dashboard")
+    setError("")
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || "Something went wrong")
+        return
+      }
+      router.push("/dashboard")
+    } catch {
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const steps = ["Business details", "Business type", "Location & links", "Choose plan"]
@@ -159,6 +184,10 @@ export function SignupForm() {
           </div>
         )}
 
+        {error && (
+          <p className="text-center text-xs text-red-400 mt-4 -mb-2">{error}</p>
+        )}
+
         {/* Navigation buttons */}
         <div className="flex gap-3 mt-8">
           {step > 1 && (
@@ -167,7 +196,7 @@ export function SignupForm() {
             </Button>
           )}
           {step < 4 ? (
-            <Button variant="primary" onClick={() => setStep((s) => s + 1)} className="flex-1">
+            <Button variant="primary" onClick={() => setStep((s) => s + 1)} className="flex-1" disabled={!canContinue}>
               Continue
             </Button>
           ) : (
