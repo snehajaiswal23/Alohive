@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Business {
+  id                String   @id @default(cuid())
+  name              String
+  type              String
+  city              String
+  locality          String?
+  phone             String
+  googlePlaceId     String?
+  googleReviewLink  String?
+  whatsappNumber    String?
+  logoUrl           String?
+  plan              String   @default("trial")
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users             User[]
+  customers         Customer[]
+  visits            Visit[]
+  feedback          Feedback[]
+  googleReviews     GoogleReview[]
+  loyaltyConfig     LoyaltyConfig?
+  loyaltyTx         LoyaltyTransaction[]
+  referrals         Referral[]
+  campaigns         Campaign[]
+  competitors       Competitor[]
+  subscription      Subscription?
+  invoices          Invoice[]
+  whatsappMessages  WhatsappMessage[]
+  notifications     Notification[]
+  staff             Staff[]
+  services          Service[]
+  auditLogs         AuditLog[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  businessId   String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("receptionist")
+  name         String
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+  auditLogs    AuditLog[]
+}
+
+model Customer {
+  id             String   @id @default(cuid())
+  businessId     String
+  name           String
+  phone          String
+  loyaltyPoints  Int      @default(0)
+  loyaltyTier    String   @default("Bronze")
+  totalVisits    Int      @default(0)
+  lastVisitAt    DateTime?
+  feedbackAvg    Float    @default(0)
+  riskTag        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  business         Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  visits           Visit[]
+  feedback         Feedback[]
+  loyaltyTx        LoyaltyTransaction[]
+  whatsappMessages WhatsappMessage[]
+  referralsMade    Referral[]           @relation("Referrer")
+  referralsReceived Referral[]          @relation("Referred")
+}
+
+model Staff {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  roleLabel  String   @default("Stylist")
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  visits     Visit[]
+}
+
+model Service {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  category   String?
+  price      Float?
+  isActive   Boolean  @default(true)
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Visit {
+  id             String   @id @default(cuid())
+  businessId     String
+  customerId     String
+  staffId        String?
+  service        String?
+  billAmount     Float?
+  visitedAt      DateTime @default(now())
+  whatsappSent   Boolean  @default(false)
+  feedbackReceived Boolean @default(false)
+
+  business       Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer       Customer  @relation(fields: [customerId], references: [id])
+  staff          Staff?    @relation(fields: [staffId], references: [id])
+  feedback       Feedback?
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  visitId     String   @unique
+  customerId  String
+  businessId  String
+  score       Int
+  sentiment   String
+  message     String?
+  createdAt   DateTime @default(now())
+
+  visit       Visit    @relation(fields: [visitId], references: [id])
+  customer    Customer @relation(fields: [customerId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model GoogleReview {
+  id              String   @id @default(cuid())
+  businessId      String
+  reviewerName    String
+  rating          Int
+  reviewText      String?
+  replyText       String?
+  googleReviewId  String?  @unique
+  createdAt       DateTime @default(now())
+
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model LoyaltyConfig {
+  id                  String @id @default(cuid())
+  businessId          String @unique
+  pointsPerVisit      Int    @default(10)
+  pointsPerReview     Int    @default(50)
+  pointsPerReferral   Int    @default(100)
+  tierThresholds      Json   @default("{\"Silver\":300,\"Gold\":800,\"Platinum\":2000}")
+  rewards             Json   @default("[]")
+
+  business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model LoyaltyTransaction {
+  id          String   @id @default(cuid())
+  customerId  String
+  businessId  String
+  type        String
+  points      Int
+  description String?
+  createdAt   DateTime @default(now())
+
+  customer    Customer @relation(fields: [customerId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Referral {
+  id                  String   @id @default(cuid())
+  businessId          String
+  referrerCustomerId  String
+  referredCustomerId  String?
+  status              String   @default("pending")
+  rewardGiven         Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  business            Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  referrer            Customer  @relation("Referrer", fields: [referrerCustomerId], references: [id])
+  referred            Customer? @relation("Referred", fields: [referredCustomerId], references: [id])
+}
+
+model Campaign {
+  id               String   @id @default(cuid())
+  businessId       String
+  type             String
+  name             String
+  messageTemplate  String
+  audienceFilter   Json?
+  status           String   @default("draft")
+  sentCount        Int      @default(0)
+  openCount        Int      @default(0)
+  replyCount       Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  business         Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Competitor {
+  id              String   @id @default(cuid())
+  businessId      String
+  competitorName  String
+  googlePlaceId   String?
+  rating          Float?
+  reviewCount     Int?
+  lastSynced      DateTime?
+  createdAt       DateTime @default(now())
+
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                       String   @id @default(cuid())
+  businessId               String   @unique
+  plan                     String
+  razorpaySubscriptionId   String?
+  status                   String   @default("active")
+  currentPeriodStart       DateTime?
+  currentPeriodEnd         DateTime?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  business                 Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id                 String   @id @default(cuid())
+  businessId         String
+  amount             Float
+  currency           String   @default("INR")
+  razorpayPaymentId  String?
+  status             String   @default("pending")
+  createdAt          DateTime @default(now())
+
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model WhatsappMessage {
+  id           String   @id @default(cuid())
+  businessId   String
+  customerId   String?
+  direction    String
+  templateName String?
+  messageBody  String
+  status       String   @default("sent")
+  createdAt    DateTime @default(now())
+
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer     Customer? @relation(fields: [customerId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String?
+  type       String
+  title      String
+  message    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  businessId String?
+  userId     String?
+  action     String
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  business   Business? @relation(fields: [businessId], references: [id])
+  user       User?     @relation(fields: [userId], references: [id])
+}

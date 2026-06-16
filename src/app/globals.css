@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@theme {
+  /* Dark foundation */
+  --color-obsidian: #0A0A0F;
+  --color-deep-navy: #0D1117;
+  --color-slate-900: #111827;
+  --color-slate-800: #1F2937;
+
+  /* Trust — blue family */
+  --color-trust-50: #EFF6FF;
+  --color-trust-100: #DBEAFE;
+  --color-trust-400: #60A5FA;
+  --color-trust-500: #3B82F6;
+  --color-trust-600: #2563EB;
+  --color-trust-900: #1E3A5F;
+
+  /* Transparency — teal/cyan family */
+  --color-clarity-50: #ECFDF5;
+  --color-clarity-100: #D1FAE5;
+  --color-clarity-400: #2DD4BF;
+  --color-clarity-500: #14B8A6;
+  --color-clarity-600: #0D9488;
+  --color-clarity-900: #064E3B;
+
+  /* Growth — emerald/green family */
+  --color-growth-50: #ECFDF5;
+  --color-growth-100: #D1FAE5;
+  --color-growth-400: #34D399;
+  --color-growth-500: #10B981;
+  --color-growth-600: #059669;
+  --color-growth-900: #064E3B;
+
+  /* Text on dark */
+  --color-text-primary: #F9FAFB;
+  --color-text-secondary: #9CA3AF;
+  --color-text-tertiary: #6B7280;
+
+  /* Font families */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Border radius */
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-pill: 9999px;
+}
+
+:root {
+  --background: #0A0A0F;
+  --foreground: #F9FAFB;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glass morphism utility */
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+}
+
+/* Glow utilities */
+.glow-teal {
+  box-shadow: 0 0 40px rgba(45, 212, 191, 0.15);
+}
+.glow-blue {
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.15);
+}
+.glow-green {
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.12);
+}
+.glow-green-btn {
+  box-shadow: 0 4px 24px rgba(16, 185, 129, 0.35);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0D1117;
+}
+::-webkit-scrollbar-thumb {
+  background: #1F2937;
+  border-radius: 3px;
+}
+
+/* Dashboard light mode override */
+.dashboard-root {
+  --background: #FFFFFF;
+  --foreground: #111827;
+  background: #F9FAFB;
+  color: #111827;
+}
