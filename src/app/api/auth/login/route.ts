@@ -20,9 +20,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 })
   }
 
+  if (!user.isActive) {
+    return NextResponse.json({ error: "Your access has been revoked. Contact your business owner." }, { status: 403 })
+  }
+
   await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } })
 
-  const token = await signSession({ userId: user.id, businessId: user.businessId, role: user.role })
+  const token = await signSession({ userId: user.id, businessId: user.businessId, role: user.role, plan: user.business.plan })
 
   const res = NextResponse.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },

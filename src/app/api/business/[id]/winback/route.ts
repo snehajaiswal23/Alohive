@@ -1,13 +1,30 @@
-import { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { requireOwner } from "@/lib/api-auth"
+import { createWinbackCampaign, listWinbackCampaigns, CampaignError } from "@/lib/campaigns"
 
-export async function GET(_req: NextRequest, ctx: RouteContext<"/api/business/[id]/winback">) {
+export async function GET(req: NextRequest, ctx: RouteContext<"/api/business/[id]/winback">) {
   const { id } = await ctx.params
-  return Response.json({ businessId: id, campaigns: [] })
+  const { error } = await requireOwner(req, id)
+  if (error) return error
+
+  const campaigns = await listWinbackCampaigns(id)
+  return NextResponse.json({ campaigns })
 }
 
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/business/[id]/winback">) {
   const { id } = await ctx.params
-  const body = await req.json()
-  if (!body.name || !body.triggerDays) return Response.json({ error: "name and triggerDays required" }, { status: 400 })
-  return Response.json({ id: "camp_new", businessId: id, status: "draft", ...body }, { status: 201 })
+  const { error } = await requireOwner(req, id)
+  if (error) return error
+
+  const { name, triggerDays, messageTemplate, offer } = await req.json()
+
+  try {
+    const campaign = await createWinbackCampaign(id, { name, triggerDays: Number(triggerDays), messageTemplate, offer })
+    return NextResponse.json({ campaign }, { status: 201 })
+  } catch (e) {
+    if (e instanceof CampaignError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+    throw e
+  }
 }

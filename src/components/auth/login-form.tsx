@@ -33,7 +33,7 @@ export function LoginForm() {
         setError(data.error || "Something went wrong")
         return
       }
-      router.push(data.user.role === "owner" ? "/dashboard" : "/staff")
+      router.push(data.user.role === "owner" ? "/dashboard" : "/dashboard/today")
     } catch {
       setError("Network error. Please try again.")
     } finally {
@@ -111,9 +111,9 @@ export function LoginForm() {
           </div>
 
           <div className="flex justify-end">
-            <a href="#" className="text-xs text-clarity-400 hover:text-clarity-300">
+            <Link href="/forgot-password" className="text-xs text-clarity-400 hover:text-clarity-300">
               Forgot password?
-            </a>
+            </Link>
           </div>
 
           <Button

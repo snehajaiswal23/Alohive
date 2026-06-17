@@ -35,10 +35,14 @@ model Business {
   subscription      Subscription?
   invoices          Invoice[]
   whatsappMessages  WhatsappMessage[]
+  whatsappConfig    WhatsappConfig?
+  whatsappTemplates WhatsappTemplate[]
   notifications     Notification[]
   staff             Staff[]
   services          Service[]
   auditLogs         AuditLog[]
+  winBackTargets    WinBackTarget[]
+  googleOAuthConfig GoogleOAuthConfig?
 }
 
 model User {
@@ -48,8 +52,11 @@ model User {
   passwordHash String
   role         String   @default("receptionist")
   name         String
+  isActive     Boolean  @default(true)
   lastLogin    DateTime?
   createdAt    DateTime @default(now())
+  resetToken          String?   @unique
+  resetTokenExpiresAt DateTime?
 
   business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   notifications Notification[]
@@ -63,6 +70,7 @@ model Customer {
   phone          String
   loyaltyPoints  Int      @default(0)
   loyaltyTier    String   @default("Bronze")
+  referralCode   String?  @unique
   totalVisits    Int      @default(0)
   lastVisitAt    DateTime?
   feedbackAvg    Float    @default(0)
@@ -77,6 +85,8 @@ model Customer {
   whatsappMessages WhatsappMessage[]
   referralsMade    Referral[]           @relation("Referrer")
   referralsReceived Referral[]          @relation("Referred")
+  googleReviews    GoogleReview[]
+  winBackTarget    WinBackTarget?
 }
 
 model Staff {
@@ -87,6 +97,28 @@ model Staff {
 
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   visits     Visit[]
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  totpSecret   String?
+  totpEnabled  Boolean   @default(false)
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  description String?
+  enabledFor  String   @default("all")
+  isEnabled   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
 }
 
 model Service {
@@ -133,16 +165,20 @@ model Feedback {
 }
 
 model GoogleReview {
-  id              String   @id @default(cuid())
-  businessId      String
-  reviewerName    String
-  rating          Int
-  reviewText      String?
-  replyText       String?
-  googleReviewId  String?  @unique
-  createdAt       DateTime @default(now())
+  id                String   @id @default(cuid())
+  businessId        String
+  customerId        String?
+  reviewerName      String
+  rating            Int
+  reviewText        String?
+  replyText         String?
+  aiSuggestedReply  String?
+  googleReviewId    String?  @unique
+  publishedAt       DateTime?
+  createdAt         DateTime @default(now())
 
-  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer          Customer? @relation(fields: [customerId], references: [id])
 }
 
 model LoyaltyConfig {
@@ -189,16 +225,20 @@ model Campaign {
   businessId       String
   type             String
   name             String
+  triggerDays      Int?
   messageTemplate  String
+  offer            String?
   audienceFilter   Json?
   status           String   @default("draft")
   sentCount        Int      @default(0)
   openCount        Int      @default(0)
   replyCount       Int      @default(0)
+  recoveredCount   Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  business         Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  messages         WhatsappMessage[]
 }
 
 model Competitor {
@@ -215,43 +255,106 @@ model Competitor {
 }
 
 model Subscription {
-  id                       String   @id @default(cuid())
-  businessId               String   @unique
+  id                       String    @id @default(cuid())
+  businessId               String    @unique
   plan                     String
-  razorpaySubscriptionId   String?
-  status                   String   @default("active")
+  razorpaySubscriptionId   String?   @unique
+  razorpayCustomerId       String?
+  razorpayShortUrl         String?
+  status                   String    @default("created")
   currentPeriodStart       DateTime?
   currentPeriodEnd         DateTime?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  canceledAt               DateTime?
+  paymentMethod            Json?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   business                 Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
 
 model Invoice {
+  id                     String    @id @default(cuid())
+  businessId             String
+  amount                 Float
+  currency               String    @default("INR")
+  razorpayPaymentId      String?
+  razorpaySubscriptionId String?
+  description            String?
+  periodStart            DateTime?
+  periodEnd              DateTime?
+  status                 String    @default("pending")
+  createdAt              DateTime  @default(now())
+
+  business               Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model GoogleOAuthConfig {
+  id           String    @id @default(cuid())
+  businessId   String    @unique
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  accountId    String?
+  locationId   String?
+  isConnected  Boolean   @default(false)
+  connectedAt  DateTime?
+  lastSyncedAt DateTime?
+  lastError    String?
+  updatedAt    DateTime  @updatedAt
+
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model WhatsappConfig {
+  id          String    @id @default(cuid())
+  businessId  String    @unique
+  provider    String    @default("gupshup")
+  apiKey      String
+  appName     String?
+  isConnected Boolean   @default(false)
+  connectedAt DateTime?
+  lastError   String?
+  updatedAt   DateTime  @updatedAt
+
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model WhatsappTemplate {
   id                 String   @id @default(cuid())
   businessId         String
-  amount             Float
-  currency           String   @default("INR")
-  razorpayPaymentId  String?
-  status             String   @default("pending")
+  name               String
+  category           String   @default("Utility")
+  language           String   @default("en")
+  body               String
+  status             String   @default("draft")
+  gupshupTemplateId  String?
   createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, name])
 }
 
 model WhatsappMessage {
-  id           String   @id @default(cuid())
-  businessId   String
-  customerId   String?
-  direction    String
-  templateName String?
-  messageBody  String
-  status       String   @default("sent")
-  createdAt    DateTime @default(now())
+  id               String   @id @default(cuid())
+  businessId       String
+  customerId       String?
+  campaignId       String?
+  direction        String
+  templateName     String?
+  messageBody      String
+  status           String   @default("sent")
+  gupshupMessageId String?
+  readAt           DateTime?
+  repliedAt        DateTime?
+  createdAt        DateTime @default(now())
 
   business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customer     Customer? @relation(fields: [customerId], references: [id])
+  campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([gupshupMessageId])
 }
 
 model Notification {
@@ -265,7 +368,24 @@ model Notification {
   createdAt  DateTime @default(now())
 
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user       User?    @relation(fields: [userId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model WinBackTarget {
+  id           String    @id @default(cuid())
+  businessId   String
+  customerId   String    @unique
+  bucket             Int
+  daysInactive       Int
+  lastVisitAt        DateTime
+  scannedAt          DateTime  @default(now())
+  contactedAt        DateTime?
+  lastCampaignBucket Int?
+
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, bucket])
 }
 
 model AuditLog {
@@ -278,5 +398,5 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   business   Business? @relation(fields: [businessId], references: [id])
-  user       User?     @relation(fields: [userId], references: [id])
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 }

@@ -1,61 +1,93 @@
+import { cookies } from "next/headers"
 import { Topbar } from "@/components/dashboard/topbar"
 import { DashCard } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Building2, MessageSquare, Users, CreditCard, Bell, Download, Check, X } from "lucide-react"
+import { StaffManagement } from "@/components/dashboard/staff-management"
+import { CatalogManagement } from "@/components/dashboard/catalog-management"
+import { WhatsappManagement } from "@/components/dashboard/whatsapp-management"
+import { verifySession, SESSION_COOKIE } from "@/lib/session"
+import { prisma } from "@/lib/prisma"
+import { Building2, MessageSquare, Users, CreditCard, Bell, Download } from "lucide-react"
 
-const sections = [
-  {
-    icon: Building2,
-    title: "Business profile",
-    desc: "Name, address, category, logo, opening hours",
-    status: "Configured",
-    color: "green",
-  },
-  {
-    icon: MessageSquare,
-    title: "WhatsApp setup",
-    desc: "+91 98765 43210 · Connected via Gupshup",
-    status: "Connected",
-    color: "green",
-  },
-  {
-    icon: Building2,
-    title: "Google review link",
-    desc: "maps.google.com/?cid=… · Verified",
-    status: "Verified",
-    color: "green",
-  },
-  {
-    icon: Users,
-    title: "Staff management",
-    desc: "3 receptionists · 1 owner",
-    status: null,
-    color: null,
-  },
-  {
-    icon: CreditCard,
-    title: "Plan & billing",
-    desc: "Growth plan · ₹2,499/mo · Renews Jul 15",
-    status: "Active",
-    color: "blue",
-  },
-  {
-    icon: Bell,
-    title: "Notifications",
-    desc: "WhatsApp summary, alerts, billing",
-    status: null,
-    color: null,
-  },
-]
+export default async function SettingsPage() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value
+  const payload = token ? await verifySession(token).catch(() => null) : null
 
-const staff = [
-  { name: "Kavya Rao", role: "Receptionist", email: "kavya@glossstudio.com", active: true },
-  { name: "Sneha Iyer", role: "Receptionist", email: "sneha@glossstudio.com", active: true },
-  { name: "Rahul Das", role: "Receptionist", email: "rahul@glossstudio.com", active: false },
-]
+  const user = payload
+    ? await prisma.user.findUnique({ where: { id: payload.userId }, include: { business: true } })
+    : null
 
-export default function SettingsPage() {
+  const staffRows = user
+    ? await prisma.user.findMany({
+        where: { businessId: user.businessId, role: "receptionist" },
+        select: { id: true, name: true, email: true, isActive: true, lastLogin: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : []
+
+  const activeCount = staffRows.filter((s) => s.isActive).length
+
+  const [serviceRows, stylistRows, whatsappConfig, whatsappTemplates, subscription] = user
+    ? await Promise.all([
+        prisma.service.findMany({ where: { businessId: user.businessId }, orderBy: { name: "asc" } }),
+        prisma.staff.findMany({ where: { businessId: user.businessId }, orderBy: { name: "asc" } }),
+        prisma.whatsappConfig.findUnique({ where: { businessId: user.businessId } }),
+        prisma.whatsappTemplate.findMany({ where: { businessId: user.businessId }, orderBy: { createdAt: "asc" } }),
+        prisma.subscription.findUnique({ where: { businessId: user.businessId } }),
+      ])
+    : [[], [], null, [], null]
+
+  const sections = [
+    {
+      icon: Building2,
+      title: "Business profile",
+      desc: "Name, address, category, logo, opening hours",
+      status: "Configured",
+      color: "green",
+    },
+    {
+      icon: MessageSquare,
+      title: "WhatsApp setup",
+      desc: whatsappConfig?.isConnected
+        ? `${user?.business.whatsappNumber || "No number set"} · Connected via Gupshup`
+        : "Not connected yet",
+      status: whatsappConfig?.isConnected ? "Connected" : "Not connected",
+      color: whatsappConfig?.isConnected ? "green" : "gray",
+    },
+    {
+      icon: Building2,
+      title: "Google review link",
+      desc: "maps.google.com/?cid=… · Verified",
+      status: "Verified",
+      color: "green",
+    },
+    {
+      icon: Users,
+      title: "Staff management",
+      desc: `${activeCount} receptionist${activeCount === 1 ? "" : "s"} · 1 owner`,
+      status: null,
+      color: null,
+    },
+    {
+      icon: CreditCard,
+      title: "Plan & billing",
+      desc: subscription
+        ? `${subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan · ${subscription.status === "active" ? "Active" : subscription.status}${subscription.currentPeriodEnd ? ` · Renews ${subscription.currentPeriodEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}`
+        : "No active subscription",
+      status: subscription?.status === "active" ? "Active" : subscription?.status === "trialing" ? "Trial" : subscription ? "Inactive" : null,
+      color: subscription?.status === "active" ? "blue" : subscription?.status === "trialing" ? "amber" : "gray",
+      href: "/dashboard/billing",
+    },
+    {
+      icon: Bell,
+      title: "Notifications",
+      desc: "WhatsApp summary, alerts, billing",
+      status: null,
+      color: null,
+    },
+  ]
+
   return (
     <div>
       <Topbar title="Settings" subtitle="Manage your business account and preferences" />
@@ -70,48 +102,53 @@ export default function SettingsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <p className="font-medium text-gray-800 text-sm">{s.title}</p>
-                  {s.status && <Badge color={s.color as "green" | "blue"} variant="subtle">{s.status}</Badge>}
+                  {s.status && <Badge color={s.color as "green" | "blue" | "gray"} variant="subtle">{s.status}</Badge>}
                 </div>
                 <p className="text-xs text-gray-400">{s.desc}</p>
               </div>
-              <button className="text-xs text-clarity-600 hover:text-clarity-700 font-medium shrink-0">Edit</button>
+              {"href" in s && s.href ? (
+                <a href={s.href} className="text-xs text-clarity-600 hover:text-clarity-700 font-medium shrink-0">Manage</a>
+              ) : (
+                <button className="text-xs text-clarity-600 hover:text-clarity-700 font-medium shrink-0">Edit</button>
+              )}
             </DashCard>
           ))}
         </div>
 
-        {/* Staff management table */}
-        <DashCard>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-sm font-semibold text-gray-800">Staff accounts</h2>
-            <Button variant="primary" size="sm">+ Add staff</Button>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {["Name", "Role", "Email", "Status", ""].map((h) => (
-                  <th key={h} className="text-left pb-2 text-xs font-semibold text-gray-400">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {staff.map((s, i) => (
-                <tr key={i} className="border-b border-gray-50">
-                  <td className="py-3 font-medium text-gray-800">{s.name}</td>
-                  <td className="py-3 text-gray-500">{s.role}</td>
-                  <td className="py-3 text-gray-500">{s.email}</td>
-                  <td className="py-3">
-                    <Badge color={s.active ? "green" : "gray"} variant="subtle">
-                      {s.active ? "Active" : "Inactive"}
-                    </Badge>
-                  </td>
-                  <td className="py-3">
-                    <button className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </DashCard>
+        {/* Staff management */}
+        {user && (
+          <StaffManagement
+            businessId={user.businessId}
+            initialStaff={staffRows.map((s) => ({ ...s, lastLogin: s.lastLogin?.toISOString() ?? null, createdAt: s.createdAt.toISOString() }))}
+          />
+        )}
+
+        {/* Services & stylists */}
+        {user && (
+          <CatalogManagement
+            businessId={user.businessId}
+            initialServices={serviceRows}
+            initialStylists={stylistRows}
+          />
+        )}
+
+        {/* WhatsApp setup & templates */}
+        {user && (
+          <WhatsappManagement
+            businessId={user.businessId}
+            initialConfig={
+              whatsappConfig
+                ? {
+                    appName: whatsappConfig.appName,
+                    isConnected: whatsappConfig.isConnected,
+                    lastError: whatsappConfig.lastError,
+                    apiKeyMasked: `••••${whatsappConfig.apiKey.slice(-4)}`,
+                  }
+                : null
+            }
+            initialTemplates={whatsappTemplates}
+          />
+        )}
 
         {/* Data export */}
         <DashCard>

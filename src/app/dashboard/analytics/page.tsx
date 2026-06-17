@@ -1,103 +1,201 @@
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+import { verifySession, SESSION_COOKIE } from "@/lib/session"
+import { prisma } from "@/lib/prisma"
+import { getAnalytics } from "@/lib/analytics"
 import { Topbar } from "@/components/dashboard/topbar"
 import { StatCard } from "@/components/ui/stat-card"
 import { DashCard } from "@/components/ui/card"
-import { TrendingUp, Users, IndianRupee, BarChart2 } from "lucide-react"
+import {
+  RevenueChart,
+  CampaignROIChart,
+  PeakHoursHeatmap,
+  StaffTable,
+} from "@/components/dashboard/analytics-charts"
+import { formatCurrency } from "@/lib/utils"
+import { IndianRupee, Users, TrendingUp, RotateCcw, Target, Clock } from "lucide-react"
 
-const peakHours = [
-  [0,0,0,0,0,0,1,2,3,3,4,5],
-  [0,0,0,0,0,0,1,3,4,5,5,4],
-  [0,0,0,0,0,0,0,2,3,4,5,5],
-  [0,0,0,0,0,0,1,2,3,4,4,3],
-  [0,0,0,0,0,0,2,3,4,5,5,4],
-  [0,0,0,0,0,0,3,4,5,5,5,4],
-  [0,0,0,0,0,0,1,2,2,3,3,2],
-]
-const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-const hours = ["9","10","11","12","13","14","15","16","17","18","19","20"]
+export default async function AnalyticsPage() {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value
+  const payload = token ? await verifySession(token).catch(() => null) : null
+  if (!payload) redirect("/login")
 
-const heatColor = ["bg-gray-100","bg-growth-100","bg-growth-200","bg-growth-300","bg-growth-400","bg-growth-500"]
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { businessId: true },
+  })
+  if (!user) redirect("/login")
 
-const staffPerf = [
-  { name: "Priya Mehta", visits: 82, rating: 4.9, revenue: "₹41,000" },
-  { name: "Kavya Rao", visits: 64, rating: 4.7, revenue: "₹32,000" },
-  { name: "Sneha Iyer", visits: 58, rating: 4.5, revenue: "₹29,000" },
-]
+  const data = await getAnalytics(user.businessId)
 
-export default function AnalyticsPage() {
+  const revChange = data.revenueLastMonth > 0
+    ? Math.round(((data.revenueMTD - data.revenueLastMonth) / data.revenueLastMonth) * 100)
+    : null
+
+  const activeRate = data.totalCustomers > 0
+    ? Math.round((data.activeCustomers30d / data.totalCustomers) * 100)
+    : 0
+
+  const avgCampaignROI = data.campaignROI.length > 0
+    ? Math.round(data.campaignROI.reduce((s, c) => s + c.roiPct, 0) / data.campaignROI.length)
+    : null
+
   return (
     <div>
-      <Topbar title="Analytics" subtitle="Business performance insights" />
+      <Topbar title="Analytics" subtitle="Revenue, retention, and performance — all from your real data" />
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard theme="light" title="Monthly revenue" value="₹1.02L" change="+12% vs last mo" changePositive accentColor="green" icon={<IndianRupee size={16} />} />
-          <StatCard theme="light" title="Total visits (mo)" value="204" change="+8% vs last mo" changePositive accentColor="teal" icon={<Users size={16} />} />
-          <StatCard theme="light" title="Avg customer LTV" value="₹3,400" change="+5%" changePositive accentColor="blue" icon={<TrendingUp size={16} />} />
-          <StatCard theme="light" title="Retention rate" value="68%" change="+3% vs last mo" changePositive accentColor="amber" icon={<BarChart2 size={16} />} />
+
+        {/* ── KPI stat cards ─────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <StatCard
+            theme="light"
+            title="Revenue MTD"
+            value={formatCurrency(data.revenueMTD)}
+            change={revChange != null ? `${revChange >= 0 ? "+" : ""}${revChange}% vs last mo` : undefined}
+            changePositive={revChange != null ? revChange >= 0 : undefined}
+            accentColor="green"
+            icon={<IndianRupee size={16} />}
+          />
+          <StatCard
+            theme="light"
+            title="Last month"
+            value={formatCurrency(data.revenueLastMonth)}
+            accentColor="teal"
+            icon={<IndianRupee size={16} />}
+          />
+          <StatCard
+            theme="light"
+            title="Avg CLV"
+            value={data.clv > 0 ? formatCurrency(data.clv) : "—"}
+            change="lifetime spend / customer"
+            accentColor="blue"
+            icon={<TrendingUp size={16} />}
+          />
+          <StatCard
+            theme="light"
+            title="Retention rate"
+            value={`${data.retentionRate}%`}
+            change="30-day repeat visitors"
+            changePositive={data.retentionRate >= 50}
+            accentColor="amber"
+            icon={<RotateCcw size={16} />}
+          />
+          <StatCard
+            theme="light"
+            title="Active customers"
+            value={`${data.activeCustomers30d} / ${data.totalCustomers}`}
+            change={`${activeRate}% active in 30d`}
+            changePositive={activeRate >= 30}
+            accentColor="teal"
+            icon={<Users size={16} />}
+          />
+          <StatCard
+            theme="light"
+            title="Avg campaign ROI"
+            value={avgCampaignROI != null ? `${avgCampaignROI}%` : "—"}
+            change={data.campaignROI.length > 0 ? `across ${data.campaignROI.length} campaign${data.campaignROI.length !== 1 ? "s" : ""}` : "no campaigns yet"}
+            changePositive={avgCampaignROI != null ? avgCampaignROI >= 10 : undefined}
+            accentColor="green"
+            icon={<Target size={16} />}
+          />
         </div>
 
-        {/* Peak hours heatmap */}
+        {/* ── Revenue trend ──────────────────────────────────────── */}
         <DashCard>
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">Peak hours heatmap</h2>
-          <div className="overflow-x-auto">
-            <div className="flex gap-3">
-              {/* Y-axis labels */}
-              <div className="flex flex-col gap-1 pt-5">
-                {days.map((d) => (
-                  <div key={d} className="h-7 flex items-center text-xs text-gray-400 w-8">{d}</div>
-                ))}
-              </div>
-              <div>
-                {/* X-axis labels */}
-                <div className="flex gap-1 mb-1">
-                  {hours.map((h) => (
-                    <div key={h} className="w-7 text-center text-xs text-gray-400">{h}</div>
-                  ))}
-                </div>
-                {/* Heatmap grid */}
-                {peakHours.map((row, di) => (
-                  <div key={di} className="flex gap-1 mb-1">
-                    {row.map((val, hi) => (
-                      <div
-                        key={hi}
-                        className={`w-7 h-7 rounded ${heatColor[val]} transition-all`}
-                        title={`${days[di]} ${hours[hi]}:00 — ${val === 0 ? "quiet" : val === 5 ? "peak" : "moderate"}`}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Revenue trend</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Monthly revenue from logged visits (last 12 months)</p>
             </div>
-            <div className="flex items-center gap-2 mt-3 text-xs text-gray-400">
-              <span>Low</span>
-              {heatColor.map((c, i) => <div key={i} className={`w-4 h-4 rounded ${c}`} />)}
-              <span>High</span>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">This month</p>
+              <p className="text-lg font-bold text-gray-900">{formatCurrency(data.revenueMTD)}</p>
             </div>
           </div>
+          <RevenueChart data={data.monthlyRevenue} />
         </DashCard>
 
-        {/* Staff performance */}
+        {/* ── Campaign ROI + Staff ───────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          <DashCard>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-gray-800">Campaign ROI</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Messages sent vs customers recovered per campaign</p>
+            </div>
+            <CampaignROIChart data={data.campaignROI} />
+            {data.campaignROI.length > 0 && (
+              <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-gray-200 inline-block" />
+                  Sent
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-growth-500 inline-block" />
+                  Recovered ≥20%
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-trust-500 inline-block" />
+                  10–19%
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-amber-400 inline-block" />
+                  &lt;10%
+                </span>
+              </div>
+            )}
+          </DashCard>
+
+          <DashCard>
+            <div className="flex items-center gap-2 mb-4">
+              <h2 className="text-sm font-semibold text-gray-800">Staff performance</h2>
+            </div>
+            <StaffTable data={data.staffPerformance} />
+          </DashCard>
+
+        </div>
+
+        {/* ── Peak hours heatmap ─────────────────────────────────── */}
         <DashCard>
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">Staff performance</h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {["Staff", "Visits", "Rating", "Revenue"].map((h) => (
-                  <th key={h} className="text-left pb-2 text-xs font-semibold text-gray-400">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {staffPerf.map((s, i) => (
-                <tr key={i} className="border-b border-gray-50">
-                  <td className="py-3 font-medium text-gray-800">{s.name}</td>
-                  <td className="py-3 text-gray-600">{s.visits}</td>
-                  <td className="py-3 text-amber-600 font-medium">{s.rating} ★</td>
-                  <td className="py-3 font-medium text-growth-600">{s.revenue}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="flex items-center gap-2 mb-4">
+            <Clock size={15} className="text-gray-400" />
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Peak hours</h2>
+              <p className="text-xs text-gray-400">Visit density by day and hour (last 90 days)</p>
+            </div>
+          </div>
+          <PeakHoursHeatmap
+            days={data.peakHours.days}
+            hours={data.peakHours.hours}
+            data={data.peakHours.data}
+          />
         </DashCard>
+
+        {/* ── CLV detail card ────────────────────────────────────── */}
+        {data.clv > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <DashCard className="bg-growth-50 border-growth-200">
+              <p className="text-xs text-growth-700 font-semibold uppercase tracking-wide mb-1">Customer Lifetime Value</p>
+              <p className="text-3xl font-bold text-growth-800">{formatCurrency(data.clv)}</p>
+              <p className="text-xs text-growth-600 mt-1">Average total spend per customer across all visits</p>
+            </DashCard>
+            <DashCard className="bg-trust-50 border-trust-200">
+              <p className="text-xs text-trust-700 font-semibold uppercase tracking-wide mb-1">30-day retention</p>
+              <p className="text-3xl font-bold text-trust-800">{data.retentionRate}%</p>
+              <p className="text-xs text-trust-600 mt-1">
+                Customers who returned within 30 days of their previous visit
+              </p>
+            </DashCard>
+            <DashCard className="bg-amber-50 border-amber-200">
+              <p className="text-xs text-amber-700 font-semibold uppercase tracking-wide mb-1">Active base</p>
+              <p className="text-3xl font-bold text-amber-800">{data.activeCustomers30d}</p>
+              <p className="text-xs text-amber-600 mt-1">
+                Customers who visited in the last 30 days out of {data.totalCustomers} total
+              </p>
+            </DashCard>
+          </div>
+        )}
+
       </div>
     </div>
   )

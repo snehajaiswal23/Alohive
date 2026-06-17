@@ -16,9 +16,35 @@ const BUSINESS_TYPES = [
 ]
 
 const PLANS = [
-  { id: "starter", name: "Starter", price: "₹999/mo" },
-  { id: "growth", name: "Growth", price: "₹2,499/mo", popular: true },
-  { id: "trial", name: "Free Trial", price: "14 days free" },
+  {
+    id: "trial",
+    name: "Free Trial",
+    price: "14 days free",
+    note: "No card required",
+    features: ["All Growth features", "Up to 100 customers"],
+  },
+  {
+    id: "starter",
+    name: "Starter",
+    price: "₹999/mo",
+    note: "Billed monthly",
+    features: ["500 customers", "WhatsApp feedback", "Loyalty & reviews"],
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    price: "₹2,499/mo",
+    note: "Billed monthly",
+    popular: true,
+    features: ["2,000 customers", "Win-back campaigns", "Advanced analytics"],
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "₹4,999/mo",
+    note: "Billed monthly",
+    features: ["Unlimited customers", "Multi-branch", "Dedicated support"],
+  },
 ]
 
 export function SignupForm() {
@@ -67,7 +93,12 @@ export function SignupForm() {
         setError(data.error || "Something went wrong")
         return
       }
-      router.push("/dashboard")
+      // For paid plans the API returns a Razorpay hosted checkout URL
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+      } else {
+        router.push("/dashboard")
+      }
     } catch {
       setError("Network error. Please try again.")
     } finally {
@@ -168,19 +199,32 @@ export function SignupForm() {
                 key={plan.id}
                 onClick={() => setForm((f) => ({ ...f, plan: plan.id }))}
                 className={cn(
-                  "w-full flex items-center justify-between p-4 rounded-[12px] border transition-all",
+                  "w-full flex items-start justify-between p-4 rounded-[12px] border transition-all text-left",
                   form.plan === plan.id
                     ? "border-growth-500 bg-growth-900/20 text-text-primary"
                     : "border-white/10 bg-white/3 text-text-secondary hover:border-white/20",
                 )}
               >
-                <span className="font-medium text-sm">{plan.name}</span>
-                <div className="flex items-center gap-2">
-                  {plan.popular && <span className="text-xs bg-growth-500 text-white px-2 py-0.5 rounded-full">Popular</span>}
-                  <span className="text-sm font-bold text-text-primary">{plan.price}</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-sm">{plan.name}</span>
+                    {plan.popular && (
+                      <span className="text-xs bg-growth-500 text-white px-2 py-0.5 rounded-full">Popular</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-tertiary">{plan.features.join(" · ")}</p>
+                </div>
+                <div className="text-right shrink-0 ml-4">
+                  <p className="text-sm font-bold text-text-primary">{plan.price}</p>
+                  <p className="text-xs text-text-tertiary">{plan.note}</p>
                 </div>
               </button>
             ))}
+            {form.plan !== "trial" && (
+              <p className="text-xs text-text-tertiary text-center mt-1">
+                You&apos;ll be redirected to Razorpay to complete payment after account creation.
+              </p>
+            )}
           </div>
         )}
 
@@ -201,7 +245,11 @@ export function SignupForm() {
             </Button>
           ) : (
             <Button variant="primary" glow onClick={handleFinish} className="flex-1" disabled={loading}>
-              {loading ? "Creating account…" : "Create account & start trial"}
+              {loading
+                ? form.plan === "trial" ? "Creating account…" : "Creating account…"
+                : form.plan === "trial"
+                ? "Start free trial"
+                : `Create account & pay`}
             </Button>
           )}
         </div>

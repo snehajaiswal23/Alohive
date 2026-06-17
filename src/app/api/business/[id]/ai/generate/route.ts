@@ -1,16 +1,32 @@
 import { NextRequest } from "next/server"
+import { prisma } from "@/lib/prisma"
+import { requireOwner } from "@/lib/api-auth"
+import { generateMarketingContent, type Tone, type Language } from "@/lib/ai-generate"
 
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/business/[id]/ai/generate">) {
   const { id } = await ctx.params
-  const { prompt, tone, language } = await req.json()
-  if (!prompt) return Response.json({ error: "prompt required" }, { status: 400 })
+  const { error } = await requireOwner(req, id)
+  if (error) return error
 
-  // TODO: call OpenAI/Claude API with business context
-  return Response.json({
-    businessId: id,
-    whatsapp: `Hi {name}! 🎉 ${prompt}\n\nReply YES to claim or STOP to opt out.`,
-    instagram: `✨ ${prompt} ✨\n\nBook via link in bio. Limited slots! #Salon #Bangalore`,
-    sms: `${prompt} - Reply YES to book.`,
-    poster: prompt.toUpperCase(),
+  const body = await req.json() as { prompt?: string; tone?: Tone; language?: Language }
+  const { prompt, tone = "casual", language = "english" } = body
+
+  if (!prompt?.trim()) {
+    return Response.json({ error: "prompt is required" }, { status: 400 })
+  }
+
+  const business = await prisma.business.findUnique({
+    where: { id },
+    select: { name: true, type: true, city: true },
   })
+  if (!business) return Response.json({ error: "Business not found" }, { status: 404 })
+
+  const content = await generateMarketingContent(
+    { name: business.name, type: business.type, city: business.city },
+    prompt.trim(),
+    tone,
+    language,
+  )
+
+  return Response.json(content)
 }
